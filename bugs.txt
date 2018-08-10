@@ -1,0 +1,115 @@
+This is a running log of the bugs I've found either directy using this tool, or in the development of the tool. The idea is that it will help me to evaluate whether writing this fuzzer was an efficient use of my time.
+
+Bug 1
+=====
+
+LP: #
+
+For route types, only 'prohibit' is accepted in YAML, but the docs say that 'prohibited' is the correct form. This was found because I implemented the YAML generator based on the documentation, not the implementation.
+
+Bug 2
+=====
+
+LP: #
+
+In an IPv6 static setup with NetworkManager, such as the following:
+
+    ens8:
+      accept-ra: false
+      addresses: ['23:b0:87:58:65:f7:fb:8b/45', '63:94:73:e1:46:15:79:58/50']
+      nameservers:
+        addresses: ['f2:9d:bc:04:7b:87:ec:28']
+        search: [lab, home]
+      renderer: NetworkManager
+
+we see the following error in syslog: 
+
+NetworkManager[19666]: <warn>  [1532665946.1502] keyfile: error loading connection from file /run/NetworkManager/system-connections/net
+plan-ens8: invalid connection: ipv4.dns-search: this property is not allowed for 'method=link-local'
+
+netplan renders an ipv4 dns search property, even though there is no configured ipv4 address. NetworkManager doesn't like this and it prevents the connection from being configured.
+
+
+Bug 3
+=====
+
+netplan should warn/error if you attemt to render a route that NetworkManager does not understand.
+
+NetworkManager is only able to understand routes of the form route/plen,gateway,metric - *nothing* else is recognised. (per https://developer.gnome.org/NetworkManager/stable/nm-settings-keyfile.html) Netplan does not verify that routes for a NM connection only specify these things. Because netplan can specify blackhole and prohibit routes, this can go horribly wrong.
+
+Bug 4
+=====
+
+netplan should warn/error if you attempt to add another route to default on a NetworkManager connection. NM appears not to understand default routes - if you specify 0.0.0.0/0, a warning is printed in syslog and NM interprets it as 0.0.0.0/24.
+
+Arguably this is terrible NM behaviour and an NM bug, but it should be warned about and/or reported to them.
+
+Bug 5
+=====
+
+An unspecified gateway leads to "Gateway: (null)" being rendered.
+
+network:
+  ethernets:
+    ens11:
+      addresses: [148.225.107.152/26]
+      routes:
+      - to: 212.104.150.167/31
+        type: prohibit
+  version: 2
+
+when rendered, leads to:
+
+cat /run/systemd/network/10-netplan-ens11.network 
+[Match]
+Name=ens11
+
+[Network]
+Address=148.225.107.152/26
+
+[Route]
+Destination=212.104.150.167/31
+Gateway=(null)
+Type=prohibit
+
+Bug 6
+=====
+
+Netplan renders the source of a route as "From=", it should be "Source=".
+
+This leads to the following messages in syslog:
+
+systemd-networkd[28645]: /run/systemd/network/10-netplan-ens7.network:14: Unknown lvalue 'From' in section 'Route'
+
+Bug 7
+=====
+
+IP addresses with trailing garbage are not rejected.
+
+This route:
+
+      routes:
+      - from: 152.168.36.126/19
+        metric: 63668
+        scope: host
+        table: 11879
+        to: 0.0.0.0/0,
+        via: '129.196.75.179'
+
+Becomes
+
+[Route]
+Destination=0.0.0.0/0,
+...
+
+leading to
+systemd-networkd[28645]: /run/systemd/network/10-netplan-ens7.network:12: Route Destination= prefix is invalid, ignoring assignment: 0.0.0.0/0,
+
+
+Other Irritations
+=================
+
+Bug nm01: so, umm, NM gives you ~no~ useful info if v6 routes is misconfigured; everything rolls on fine :(
+Bug nd01: likewise, no feedback at all if a route cannot be added; everything just rolls on
+
+unconfirmed bug - I bet prohibit/etc routes will not be un-try-ed properly as they are _tricky_ to tear down.
