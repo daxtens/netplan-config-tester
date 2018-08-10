@@ -9,7 +9,14 @@ import ipaddress
 import itertools
 import random
 
-# manually shadown stupid networkmanager file!
+def parse_addr(addr_str):
+    if ':' in addr_str:
+        desired_addr = ipaddress.IPv6Network(unicode(addr_str), strict=False)
+    else:
+        desired_addr = ipaddress.IPv4Network(unicode(addr_str), strict=False)
+    return desired_addr
+
+# manually shadow stupid networkmanager file!
 with open('/etc/NetworkManager/conf.d/10-globally-managed-devices.conf', 'w') as f:
     f.write('\n')
 
@@ -39,7 +46,7 @@ for iface_name in parsed['network']['ethernets']:
             addr = ipaddress.IPv4Network(unicode(a), strict=False)
             # drop multicast
             if addr.subnet_of(ipaddress.IPv4Network(u'224.0.0.0/4')):
-                del iface['addresses'][a]
+                iface['addresses'].remove(a)
             else:
                 addresses4 += [addr]
 
@@ -109,6 +116,9 @@ for iface_name in parsed['network']['ethernets']:
             if iface['renderer'] == 'NetworkManager' and r['to'] == '0.0.0.0/0':
                 is_ok = False
 
+            # normalise 'to', otherise we get Error: Invalid prefix for given prefix length.
+            r['to'] = parse_addr(r['to']).compressed
+
             if not is_ok:
                 #print("Dropping a route for ", iface_name, r, addresses4, addresses6)
                 pass
@@ -140,15 +150,6 @@ with open('/etc/netplan/fuzz.yaml', 'w') as f:
             
 if os.system("netplan apply") != 0:
     exit(1)
-
-
-def parse_addr(addr_str):
-    if ':' in addr_str:
-        desired_addr = ipaddress.IPv6Network(unicode(addr_str), strict=False)
-    else:
-        desired_addr = ipaddress.IPv4Network(unicode(addr_str), strict=False)
-    return desired_addr
-
     
 any_down = True
 sleep = 0
