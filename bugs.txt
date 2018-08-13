@@ -127,8 +127,8 @@ Error: Route with host scope can not have a gateway.
 Bug 9
 =====
 
-netplan should not permit a non-unicast route to specify a gateway.
-
+netplan should not permit a prohibit/unreachable/blackhole route to specify a gateway.
+Otherwise it will not be applied by networkd.
 
 Other Irritations
 =================
