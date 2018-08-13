@@ -124,6 +124,11 @@ succeeds, but
 # ip route add 172.64.0.0/12 scope host dev ens10 via 1.2.3.4
 Error: Route with host scope can not have a gateway.
 
+Bug 9
+=====
+
+netplan should not permit a non-unicast route to specify a gateway.
+
 
 Other Irritations
 =================
