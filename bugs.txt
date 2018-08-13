@@ -11,6 +11,8 @@ For route types, only 'prohibit' is accepted in YAML, but the docs say that 'pro
 Bug 2
 =====
 
+LP: #1786726 - https://bugs.launchpad.net/netplan/+bug/1786726
+
 In an IPv6 static setup with NetworkManager, such as the following:
 
     ens8:

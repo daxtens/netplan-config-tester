@@ -156,16 +156,9 @@ NDef("common_properties",
 )
 
 
-#
-# disable search - bug 2
-#
-
 NDef("nameserver_parts",
-     NRef("ns_addrs"))
-
-#NDef("nameserver_parts",
-#     Or(NRef("ns_search"), NRef("ns_addrs")),
-#     Opt(Or(NRef("ns_search"), NRef("ns_addrs"))))
+     Or(NRef("ns_search"), NRef("ns_addrs")),
+     Opt(Or(NRef("ns_search"), NRef("ns_addrs"))))
 NDef("ns_search",
      "        search: [lab, home]\n") # thoughts?
 NDef("ns_addrs", "        addresses: [",
