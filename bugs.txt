@@ -4,6 +4,7 @@ Bug 1
 =====
 
 LP: #1783940 - https://bugs.launchpad.net/netplan/+bug/1783940
+Fixed in my tree
 
 For route types, only 'prohibit' is accepted in YAML, but the docs say that 'prohibited' is the correct form.
 

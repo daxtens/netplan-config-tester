@@ -212,8 +212,6 @@ NDef("ipv6_route",
 NDef("route_common",
      Opt("          on-link: true\n"),
      Opt("          metric: ", UInt(min=0, max=65535, odds=[]), "\n"),
-     # bug 1: docs say prohibit_ed_, code accepts prohibit (no ed)
-     # don't specify unicast, it's the default
      Opt("          type: ", Or("unreachable", "blackhole", "prohibit"), "\n"),
      Opt("          scope: ", Or("global", "link", "host"), "\n"),
      Opt("          table: ", UInt(min=1, max=65536, odds=[]), "\n")
