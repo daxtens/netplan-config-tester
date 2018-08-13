@@ -76,6 +76,8 @@ Type=prohibit
 Bug 6
 =====
 
+Fixed in my tree.
+
 Netplan renders the source of a route as "From=", it should be "Source=".
 
 This leads to the following messages in syslog:

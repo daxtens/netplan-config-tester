@@ -78,16 +78,12 @@ for iface_name in parsed['network']['ethernets']:
     if 'routes' in iface:
         new_routes = []
         for r in iface['routes']:
-            # NM cannot represent on-link or type - bug 3 :(
+            # NM cannot represent on-link or type or from - bug 3 :(
             if 'on-link' in r and iface['renderer'] == 'NetworkManager':
                 del r['on-link']
-
             if 'type' in r and iface['renderer'] == 'NetworkManager':
                 del r['type']
-
-            # bug 6 : from doesn't work for networkd - prints From= not Source=
-            # (always also drop for nm as result of bug 3)
-            if 'from' in r: #and iface['renderer'] == 'NetworkManager':
+            if 'from' in r and iface['renderer'] == 'NetworkManager':
                 del r['from']
 
             is_ok = False
