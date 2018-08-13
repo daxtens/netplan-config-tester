@@ -63,16 +63,12 @@ for iface_name in parsed['network']['ethernets']:
     addresses4 = []
     addresses6 = []
     for a in iface['addresses']:
-        if ':' in a:
-            addr = ipaddress.IPv6Network(unicode(a), strict=False)
-            if is_reserved(addr):
-                iface['addresses'].remove(a)
-            else:
-                addresses6 += [addr]
+        addr = parse_addr(a)
+        if is_reserved(addr):
+            iface['addresses'].remove(a)
         else:
-            addr = ipaddress.IPv4Network(unicode(a), strict=False)
-            if is_reserved(addr):
-                iface['addresses'].remove(a)
+            if ':' in a:
+                addresses6 += [addr]
             else:
                 addresses4 += [addr]
 
