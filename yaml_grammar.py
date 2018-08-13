@@ -1,10 +1,14 @@
 import gramfuzz
 from gramfuzz.fields import *
 
+
 class NRef(Ref):
     cat = "netplan_def"
+
+
 class NDef(Def):
     cat = "netplan_def"
+
 
 class Octet(UInt):
     min = 0
@@ -14,6 +18,7 @@ class Octet(UInt):
         (0.001, 255)
     ]
 
+
 # /0 is not usually allowed, special cased for routes
 # things tend to go wrong with really small netmasks so set middling mins
 class IPv4Netmask(UInt):
@@ -21,12 +26,14 @@ class IPv4Netmask(UInt):
     max = 33
     odds = []
 
+
 class IPv6Netmask(UInt):
     min = 32
     max = 97
     odds = []
 
-#todo redo above to be like this:
+
+# todo redo above to be like this:
 IPv6Part = String(min=2, max=3, charset="0123456789abcdef")
     
 
@@ -68,6 +75,7 @@ NDef("networkd_eth",
      #    # set-name requires a match, not documented but sensible
      #    Opt("      set-name: ", NRef("set_name"), "\n"),
      #)
+     "      routes:\n", NRef("networkd_routes"),
 )
 
 NDef("nm_eth",
@@ -76,6 +84,7 @@ NDef("nm_eth",
      #    # set-name requires a match, not documented but sensible
      #    Opt("      set-name: ", NRef("set_name"), "\n"),
      #)
+     "      routes:\n", NRef("nm_routes"),
 )
 
 
@@ -111,10 +120,7 @@ NDef("nm_name_match_part", "        name: ", NRef("eth_key"), "\n")
 
 # keep to devices my VM can have
 # exclude ens3 for my own sanity
-eth_keys = ["ens" + str(n) for n in range(7, 13)] #+ \
-#         ["eth" + str(n) for n in range(8)] + \
-#         ["wlp58s0", "wlp1s0"] + \
-#         ["iw" + str(n) for n in range(3)]
+eth_keys = ["ens" + str(n) for n in range(7, 13)]
 
 NDef("eth_key",
      Or(*eth_keys))
@@ -141,8 +147,8 @@ NDef("set_name", Or(*set_names))
 NDef("common_properties",
      #Opt("      dhcp4: true\n"),
      #Opt("      dhcp6: true\n"),
-     Opt("      critical: true\n"),
-     Opt("      dhcp-identifier: mac\n"),
+     #Opt("      critical: true\n"),
+     #Opt("      dhcp-identifier: mac\n"),
      Opt("      accept-ra: false\n"),
      And("      addresses: [", NRef("addresses"), "]\n",
          # gateways only make sense with addresses, per docs
@@ -150,8 +156,7 @@ NDef("common_properties",
          Opt("      gateway6: ", NRef("ipv6_address"), "\n")),
      Opt("      nameservers:\n", NRef("nameserver_parts")),
      Opt("      macaddress: ", NRef("set_mac"), "\n"),
-     Opt("      optional: true\n"),
-     "      routes:\n", NRef("routes") # formerly Opt
+     #Opt("      optional: true\n"),
      #Opt("      routing-policy:\n", NRef("routing_policy"))
 )
 
@@ -191,19 +196,25 @@ set_macs = ["52:54:00:2d:b9:5b",
             "52:54:00:aa:d3:3c"]
 NDef("set_mac", Or(*set_macs))
 
-NDef("routes", PLUS(NRef("route")))
-NDef("route", Or(NRef("ipv4_route"), NRef("ipv6_route")))
-NDef("ipv4_route",
+
+NDef("networkd_routes", PLUS(NRef("networkd_route")))
+NDef("nm_routes", PLUS(NRef("nm_route")))
+
+NDef("networkd_route", Or(NRef("networkd_ipv4_route"), NRef("networkd_ipv6_route")))
+NDef("nm_route", Or(NRef("nm_ipv4_route"), NRef("nm_ipv6_route")))
+
+NDef("networkd_ipv4_route",
      # at least to and via must be specified:
      "        - to: ", Or("0.0.0.0/0", NRef("ipv4_address_nm")), "\n",
      "          via: ", NRef("ipv4_address"), "\n",
      Opt("          from: ", NRef("ipv4_address_nm"), "\n"),
      NRef("route_common"))
-NDef("ipv6_route",
+NDef("networkd_ipv6_route",
      "        - to: ", Or('"::/0"', NRef("ipv6_address_nm")), "\n",
      "          via: ", NRef("ipv6_address"), "\n",
      Opt("          from: ", NRef("ipv6_address_nm"), "\n"),
      NRef("route_common"))
+
 NDef("route_common",
      Opt("          on-link: true\n"),
      Opt("          metric: ", UInt(min=0, max=65535, odds=[]), "\n"),
@@ -211,6 +222,22 @@ NDef("route_common",
      Opt("          scope: ", Or("global", "link", "host"), "\n"),
      Opt("          table: ", UInt(min=1, max=65536, odds=[]), "\n")
 )
+
+
+# bug 4: no default routes for networkmanager
+# bug 3: only to, via, metric for networkmanager
+NDef("nm_ipv4_route",
+     "        - to: ", NRef("ipv4_address_nm"), "\n",
+     "          via: ", NRef("ipv4_address"), "\n",
+     Opt("          metric: ", UInt(min=0, max=65535, odds=[]), "\n")
+)
+NDef("nm_ipv6_route",
+     "        - to: ", NRef("ipv6_address_nm"), "\n",
+     "          via: ", NRef("ipv6_address"), "\n",
+     Opt("          metric: ", UInt(min=0, max=65535, odds=[]), "\n")
+)
+
+
 
 NDef("routing_policy", PLUS(Or(NRef("ipv4_policy"), NRef("ipv6_policy"))))
 NDef("ipv4_policy",
