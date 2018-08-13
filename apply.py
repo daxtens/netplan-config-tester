@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 # gramfuzz is py2 only :(
 
 import gramfuzz
@@ -9,12 +10,34 @@ import ipaddress
 import itertools
 import random
 
+
 def parse_addr(addr_str):
     if ':' in addr_str:
         desired_addr = ipaddress.IPv6Network(unicode(addr_str), strict=False)
     else:
         desired_addr = ipaddress.IPv4Network(unicode(addr_str), strict=False)
     return desired_addr
+
+
+def is_reserved(addr):
+    """Return True if an network is reserved in some 
+    way, and False if it's a regular address.
+    
+    Currently checks for:
+     - IPv4 multicast addresses (224.0.0.0/4)
+     - IPv4 localhost (127.0.0.0/8)
+     - IPv6 localhost (::1/128)
+     - IPv6 multicast (ff00::/8)"""
+
+    if isinstance(addr, ipaddress.IPv4Network):
+        return (addr.subnet_of(ipaddress.IPv4Network(u'127.0.0.0/8')) or
+                addr.subnet_of(ipaddress.IPv4Network(u'224.0.0.0/4')))
+    elif isinstance(addr, ipaddress.IPv6Network):
+        return (addr == ipaddress.IPv6Network(u'::1/128') or
+                addr.subnet_of(ipaddress.IPv6Network(u'ff00::/8')))
+    elif isinstance(addr, str) or isinstance(addr, unicode):
+        return is_reserved(parse_addr(addr))
+
 
 # manually shadow stupid networkmanager file!
 with open('/etc/NetworkManager/conf.d/10-globally-managed-devices.conf', 'w') as f:
@@ -25,7 +48,7 @@ fuzzer.load_grammar("yaml_grammar.py")
 yaml_dat = fuzzer.gen(cat="yamlfile", num=1)[0]
 parsed = yaml.load(yaml_dat)
 described_ifs = parsed['network']['ethernets'].keys()
-#print(described_ifs)
+# print(described_ifs)
 
 # we need to query routing tables so keep track of the ones we use
 tables = []
@@ -41,17 +64,20 @@ for iface_name in parsed['network']['ethernets']:
     addresses6 = []
     for a in iface['addresses']:
         if ':' in a:
-            addresses6 += [ipaddress.IPv6Network(unicode(a), strict=False)]
+            addr = ipaddress.IPv6Network(unicode(a), strict=False)
+            if is_reserved(addr):
+                iface['addresses'].remove(a)
+            else:
+                addresses6 += [addr]
         else:
             addr = ipaddress.IPv4Network(unicode(a), strict=False)
-            # drop multicast
-            if addr.subnet_of(ipaddress.IPv4Network(u'224.0.0.0/4')):
+            if is_reserved(addr):
                 iface['addresses'].remove(a)
             else:
                 addresses4 += [addr]
 
     if addresses4 == [] and addresses6 == []:
-        # ergh, no ipv6 and all our ipv4 were multicast!
+        # ergh, no non-reserved addresses
         iface['addresses'] = ['1.2.3.4/8']
         addresses4 = [ipaddress.IPv4Network(u'1.0.0.0/8')]
 
@@ -104,7 +130,7 @@ for iface_name in parsed['network']['ethernets']:
                 elif not is_ok and 'on-link' in r:
                     # hoping my understanding of on-link is correct here and you
                     # cannot have an on-link gw be normally accessible
-                    if not via_addr.subnet_of(ipaddress.IPv4Network(u'224.0.0.0/4')):
+                    if not is_reserved(via_addr):
                         is_ok = True
                 elif is_ok and 'on-link' in r:
                     is_ok = False
@@ -137,8 +163,12 @@ for iface_name in parsed['network']['ethernets']:
             if iface['renderer'] == 'NetworkManager' and r['to'] == '0.0.0.0/0':
                 is_ok = False
 
-            # normalise 'to', otherise we get Error: Invalid prefix for given prefix length.
-            r['to'] = str(parse_addr(r['to']).compressed)
+            # don't permit the destination to be part of the multicast group
+            to_addr = parse_addr(r['to'])
+            if is_reserved(to_addr):
+                is_ok = False
+            # now normalise, otherise we get Error: Invalid prefix for given prefix length.
+            r['to'] = str(to_addr.compressed)
 
             # scope link and scope host can't have a gateway; drop it
             if 'scope' in r and (r['scope'] == 'link' or r['scope'] == 'host'):
@@ -202,10 +232,7 @@ while any_down:
         for addr in parsed['network']['ethernets'][intf]['addresses']:
             found_addr = False
             # canonicalise to deal with ipv6 addresses (:09: vs :9:, ::)
-            if ':' in addr:
-                desired_addr = ipaddress.IPv6Network(unicode(addr), strict=False)
-            else:
-                desired_addr = ipaddress.IPv4Network(unicode(addr), strict=False)
+            desired_addr = parse_addr(addr)
 
             for ifaddr in iface['addresses']:
                 if ':' in ifaddr['address']:
