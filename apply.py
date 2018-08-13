@@ -115,14 +115,6 @@ for iface_name in parsed['network']['ethernets']:
     if 'routes' in iface:
         new_routes = []
         for r in iface['routes']:
-            # NM cannot represent on-link or type or from - bug 3 :(
-            if 'on-link' in r and iface['renderer'] == 'NetworkManager':
-                del r['on-link']
-            if 'type' in r and iface['renderer'] == 'NetworkManager':
-                del r['type']
-            if 'from' in r and iface['renderer'] == 'NetworkManager':
-                del r['from']
-
             is_ok = False
             if not ':' in r['via']:
                 via_addr = ipaddress.IPv4Network(unicode(r['via']+'/32'))
@@ -168,11 +160,6 @@ for iface_name in parsed['network']['ethernets']:
 
                 if addresses6 == []:
                     is_ok = False
-
-            # NM cannot understand 0.0.0.0/0, makes it 0.0.0.0/24 (bug 4)
-            # so i guess just drop these routes
-            if iface['renderer'] == 'NetworkManager' and r['to'] == '0.0.0.0/0':
-                is_ok = False
 
             # don't permit the destination to be part of the multicast group
             to_addr = parse_addr(r['to'])
