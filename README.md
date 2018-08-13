@@ -27,8 +27,10 @@ By "work", you could mean either of the following questions:
 
 Yes, but it's fiddly to set up.  You'll need:
 
- - a throwaway VM with ens7 through ens12 (or, modify yaml_grammar.py to match what you have). Don't run this on a system you care about as it needs to be run as root and will mess with the networking configuration. 
+ - a throwaway VM with ens7 through ens12. These interfaces don't need to (and probably should not) be attached to a real network. (If that's a real problem, modify yaml_grammar.py and the cleanup in apply.py to match what you have.)
  
+ - Ideally, netplan compiled from the head of my tree (https://github.com/daxtens/netplan). When I find bugs, I put in a workaround so I can keep testing, but then I remove the workaround when I fix the bug. If you run with an unpatched netplan, you're likely to rediscover bugs.
+
  - A virtualenv with gramfuzz and ipaddress. (Irritatingly gramfuzz only supports python2.) 
  
 Then, as root, enter the virtualenv and run "while python apply.py; do true; done". It should be pretty chatty about what it's doing and will stop when something that should be set up has not been set up.

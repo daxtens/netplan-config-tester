@@ -12,6 +12,7 @@ Bug 2
 =====
 
 LP: #1786726 - https://bugs.launchpad.net/netplan/+bug/1786726
+Fixed in my tree
 
 In an IPv6 static setup with NetworkManager, such as the following:
 
@@ -47,6 +48,8 @@ Arguably this is terrible NM behaviour and an NM bug, but it should be warned ab
 
 Bug 5
 =====
+
+Fixed in my tree.
 
 An unspecified gateway leads to "Gateway: (null)" being rendered.
 
