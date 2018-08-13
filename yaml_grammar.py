@@ -174,7 +174,9 @@ NDef("address_nm", Or(NRef("ipv4_address_nm"), NRef("ipv6_address_nm")))
 NDef("ipv4_address_nm", NRef("ipv4_address"), "/", IPv4Netmask)
 NDef("ipv6_address_nm", '"',
      NRef("ipv6_address_inner"),  "/", IPv6Netmask, '"')
-NDef("ipv4_address", Octet(), ".", Octet(), ".", Octet(), ".", Octet())
+# NM seems to really dislike 0.n.n.n addresses and that seems not really
+# worth fussing about
+NDef("ipv4_address", Octet(min=1), ".", Octet(), ".", Octet(), ".", Octet())
 NDef("ipv6_address", '"', NRef("ipv6_address_inner"), '"')
 NDef("ipv6_address_inner",
      IPv6Part, ":", IPv6Part, ":", IPv6Part, ":", IPv6Part, ":",
