@@ -269,3 +269,6 @@ for intf in ifs:
     os.system("ip route flush type blackhole")
     os.system("ip route flush type prohibit")
     os.system("ip route flush type unreachable")
+    os.system("ip -6 route flush type blackhole")
+    os.system("ip -6 route flush type prohibit")
+    os.system("ip -6 route flush type unreachable")
