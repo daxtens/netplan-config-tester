@@ -151,7 +151,7 @@ NDef("common_properties",
      Opt("      nameservers:\n", NRef("nameserver_parts")),
      Opt("      macaddress: ", NRef("set_mac"), "\n"),
      Opt("      optional: true\n"),
-     "      routes:\n", NRef("routes")) # formerly Opt
+     "      routes:\n", NRef("routes") # formerly Opt
      #Opt("      routing-policy:\n", NRef("routing_policy"))
 )
 
