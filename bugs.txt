@@ -1,16 +1,14 @@
-This is a running log of the bugs I've found either directy using this tool, or in the development of the tool. The idea is that it will help me to evaluate whether writing this fuzzer was an efficient use of my time.
+This is a running log of the bugs I've found either directy using this tool, or in the development of the tool. The idea is that it will help me to evaluate whether writing this tester was an efficient use of my time.
 
 Bug 1
 =====
 
-LP: #
+LP: #1783940 - https://bugs.launchpad.net/netplan/+bug/1783940
 
-For route types, only 'prohibit' is accepted in YAML, but the docs say that 'prohibited' is the correct form. This was found because I implemented the YAML generator based on the documentation, not the implementation.
+For route types, only 'prohibit' is accepted in YAML, but the docs say that 'prohibited' is the correct form.
 
 Bug 2
 =====
-
-LP: #
 
 In an IPv6 static setup with NetworkManager, such as the following:
 
@@ -104,6 +102,24 @@ Destination=0.0.0.0/0,
 
 leading to
 systemd-networkd[28645]: /run/systemd/network/10-netplan-ens7.network:12: Route Destination= prefix is invalid, ignoring assignment: 0.0.0.0/0,
+
+
+Bug 8
+=====
+
+Scope link and scope host routes cannot have a gateway: they are for things on the next hop and on the system respectively.
+
+If you specify a via, you get the route failing to apply and an Invalid argument in syslog.
+If you do not specify a via, you get 'Error in network definition //etc/netplan/fuzz.yaml line 5 column 6: unicast route must include both a 'to' and 'via' IP'
+
+Example:
+      routes:
+      - {scope: host, to: '173.64.0.0/12'}
+
+# ip route add 172.64.0.0/12 scope host dev ens10
+succeeds, but
+# ip route add 172.64.0.0/12 scope host dev ens10 via 1.2.3.4
+Error: Route with host scope can not have a gateway.
 
 
 Other Irritations

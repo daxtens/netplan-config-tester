@@ -50,6 +50,11 @@ for iface_name in parsed['network']['ethernets']:
             else:
                 addresses4 += [addr]
 
+    if addresses4 == [] and addresses6 == []:
+        # ergh, no ipv6 and all our ipv4 were multicast!
+        iface['addresses'] = ['1.2.3.4/8']
+        addresses4 = [ipaddress.IPv4Network(u'1.0.0.0/8')]
+
     if 'gateway4' in iface:
         gw = ipaddress.IPv4Network(unicode(iface['gateway4']+'/32'))
         is_ok = False
@@ -94,22 +99,44 @@ for iface_name in parsed['network']['ethernets']:
                     if via_addr.subnet_of(a):
                         is_ok = True
                         break
-                if not is_ok and addresses4:
-                    via_addr = random.choice(list(itertools.islice(addresses4[-1].hosts(), 1000)))
-                    r['via'] = via_addr.compressed
-                    #print("new via for r", r)
+                if not is_ok and addresses4 and not 'on-link' in r:
+                    try:
+                        via_addr = random.choice(list(itertools.islice(addresses4[-1].hosts(), 1000)))
+                        r['via'] = via_addr.compressed
+                        #print("new via for r", r)
+                        is_ok = True
+                    except IndexError:  # empty .hosts()
+                        pass
+                elif not is_ok and 'on-link' in r:
+                    # hoping my understanding of on-link is correct here and you
+                    # cannot have an on-link gw be normally accessible
                     is_ok = True
+                elif is_ok and 'on-link' in r:
+                    is_ok = False
+
+                # finally, just verify that there exists an address of this type!
+                if addresses4 == []:
+                    is_ok = False
             else:
                 via_addr = ipaddress.IPv6Network(unicode(r['via']+'/128'))
                 for a in addresses6:
                     if via_addr.subnet_of(a):
                         is_ok = True
                         break
-                if not is_ok and addresses6:
+                if not is_ok and addresses6 and not 'on-link' in r:
                     via_addr = random.choice(list(itertools.islice(addresses6[-1].hosts(), 1000)))
                     r['via'] = via_addr.compressed
                     #print("new via for r", r)
                     is_ok = True
+                elif not is_ok and 'on-link' in r:
+                    # hoping my understanding of on-link is correct here and you
+                    # cannot have an on-link gw be normally accessible
+                    is_ok = True
+                elif is_ok and 'on-link' in r:
+                    is_ok = False
+
+                if addresses6 == []:
+                    is_ok = False
 
             # NM cannot understand 0.0.0.0/0, makes it 0.0.0.0/24 (bug 4)
             # so i guess just drop these routes
@@ -118,6 +145,13 @@ for iface_name in parsed['network']['ethernets']:
 
             # normalise 'to', otherise we get Error: Invalid prefix for given prefix length.
             r['to'] = parse_addr(r['to']).compressed
+
+            # scope link and scope host can't have a gateway; drop it
+            if 'scope' in r and (r['scope'] == 'link' or r['scope'] == 'host'):
+                if 'via' in r:
+                    del r['via']
+                # bug 8: this makes them un-renderable.
+                is_ok = False
 
             if not is_ok:
                 #print("Dropping a route for ", iface_name, r, addresses4, addresses6)
