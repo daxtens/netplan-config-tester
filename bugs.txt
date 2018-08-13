@@ -35,7 +35,7 @@ netplan renders an ipv4 dns search property, even though there is no configured 
 Bug 3
 =====
 
-netplan should warn/error if you attemt to render a route that NetworkManager does not understand.
+netplan should warn/error if you attempt to render a route that NetworkManager does not understand.
 
 NetworkManager is only able to understand routes of the form route/plen,gateway,metric - *nothing* else is recognised. (per https://developer.gnome.org/NetworkManager/stable/nm-settings-keyfile.html) Netplan does not verify that routes for a NM connection only specify these things. Because netplan can specify blackhole and prohibit routes, this can go horribly wrong.
 
