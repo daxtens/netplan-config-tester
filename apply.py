@@ -108,7 +108,8 @@ for iface_name in parsed['network']['ethernets']:
                 elif not is_ok and 'on-link' in r:
                     # hoping my understanding of on-link is correct here and you
                     # cannot have an on-link gw be normally accessible
-                    is_ok = True
+                    if not via_addr.subnet_of(ipaddress.IPv4Network(u'224.0.0.0/4')):
+                        is_ok = True
                 elif is_ok and 'on-link' in r:
                     is_ok = False
 
@@ -230,10 +231,13 @@ while any_down:
                 any_down = True
                 print("Waiting for routes on", intf)
                 break
-            
+
             for desired_route in parsed['network']['ethernets'][intf]['routes']:
                 #print(desired_route)
                 found_route = False
+                # this assumes that if to matches, we're good, which is not completely
+                # accurate but a good first pass
+                # we should also match on all other properties as well.
                 desired_to = parse_addr(desired_route['to'])
                 for iface_route in iface['routes']:
                     iface_to = parse_addr(iface_route['to'])
