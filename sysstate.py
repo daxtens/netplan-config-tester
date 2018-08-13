@@ -39,11 +39,24 @@ def parse_ip_addr_for_iface(iface, ip_addr):
 def parse_ip_route_for_iface(iface, ip_route_str, six=False, table=None):
     routes = []
     for l in ip_route_str.splitlines():
-        if not ('dev ' + iface) in l:
+        # two reasons we would consider a route
+        # 1) it mentions us specifically
+        # 2) it's a blackhole/prohibit/unreachable, in which case it could come from
+        #    any interface. So report it from all.
+        fields = l.split(" ")
+
+        is_interesting = False
+        if ('dev ' + iface) in l:
+            is_interesting = True
+            to_posn = 0
+        elif fields[0] in ['blackhole', 'prohibit', 'unreachable']:
+            is_interesting = True
+            to_posn = 1
+
+        if not is_interesting:
             continue
 
-        fields = l.split(" ")
-        route = {'to': fields[0]}
+        route = {'to': fields[to_posn]}
         if route['to'] == 'default':
             if six:
                 route['to'] = "::/0"

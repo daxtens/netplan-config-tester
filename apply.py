@@ -82,9 +82,7 @@ for iface_name in parsed['network']['ethernets']:
             if 'on-link' in r and iface['renderer'] == 'NetworkManager':
                 del r['on-link']
 
-            # it looks like this will be pretty well constantly broken
-            # thanks to bug 5
-            if 'type' in r: #and iface['renderer'] == 'NetworkManager':
+            if 'type' in r and iface['renderer'] == 'NetworkManager':
                 del r['type']
 
             # bug 6 : from doesn't work for networkd - prints From= not Source=
@@ -152,6 +150,10 @@ for iface_name in parsed['network']['ethernets']:
                     del r['via']
                 # bug 8: this makes them un-renderable.
                 is_ok = False
+
+            # likewise non-unicast routes cannot have a gateway
+            if 'type' in r and 'via' in r:
+                del r['via']
 
             if not is_ok:
                 #print("Dropping a route for ", iface_name, r, addresses4, addresses6)
@@ -253,12 +255,14 @@ while any_down:
         if sleep == 12:
             print("giving up")
             exit(1)
-print("success")        
-    
+print("success")
+
 # clean up
 ifs = ["ens" + str(n) for n in range(7, 13)]# + ["wlan0", "wlan1"]
 for intf in ifs:
     os.system("ip address flush dev " + intf)
     os.system("ip link set dev %s down" % intf)
 
-# once we fix bug 5 we will need to take more care to flush routes
+    os.system("ip route flush type blackhole")
+    os.system("ip route flush type prohibit")
+    os.system("ip route flush type unreachable")
