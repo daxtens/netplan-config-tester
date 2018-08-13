@@ -11,6 +11,8 @@ import itertools
 import random
 
 
+TEST_GENERATE = True
+
 def parse_addr(addr_str):
     if ':' in addr_str:
         desired_addr = ipaddress.IPv6Network(unicode(addr_str), strict=False)
@@ -46,6 +48,19 @@ with open('/etc/NetworkManager/conf.d/10-globally-managed-devices.conf', 'w') as
 fuzzer = gramfuzz.GramFuzzer()
 fuzzer.load_grammar("yaml_grammar.py")
 yaml_dat = fuzzer.gen(cat="yamlfile", num=1)[0]
+
+# in theory, at this point, the YAML should survive 'netplan generate'.
+# now we expect netplan generate to make the checks around e.g. the
+# things NM can't render (e.g. bug 3, bug 4), so those sorts of things
+# should really be sorted out and the grammar level.
+
+if TEST_GENERATE:
+    with open('/etc/netplan/fuzz.yaml', 'w') as f:
+        f.write(yaml_dat)
+
+    if os.system("netplan generate") != 0:
+        exit(1)
+
 parsed = yaml.load(yaml_dat)
 described_ifs = parsed['network']['ethernets'].keys()
 # print(described_ifs)
