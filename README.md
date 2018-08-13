@@ -44,3 +44,4 @@ Many, many things:
  - implement more of the grammar - wifis, bridges, bonds, vlans
  - verify more properties
  - make the code less embarassing
+ - ipv6 onlink stuff looks very complex (see tools/testing/selftests/net/fib-onlink-tests.sh in a modern linux source tree) so I have completely disabled it for now, it should be sorted out.

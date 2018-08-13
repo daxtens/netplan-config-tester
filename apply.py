@@ -116,22 +116,21 @@ for iface_name in parsed['network']['ethernets']:
                 if addresses4 == []:
                     is_ok = False
             else:
+                # onlink seems very complex in IPv6 so just disable it for now
+                # linux: tools/testing/selftests/net/fib-onlink-tests.sh
+                if 'on-link' in r:
+                    del r['on-link']
+
                 via_addr = ipaddress.IPv6Network(unicode(r['via']+'/128'))
                 for a in addresses6:
                     if via_addr.subnet_of(a):
                         is_ok = True
                         break
-                if not is_ok and addresses6 and not 'on-link' in r:
+                if not is_ok and addresses6:
                     via_addr = random.choice(list(itertools.islice(addresses6[-1].hosts(), 1000)))
                     r['via'] = str(via_addr.compressed)
                     #print("new via for r", r)
                     is_ok = True
-                elif not is_ok and 'on-link' in r:
-                    # hoping my understanding of on-link is correct here and you
-                    # cannot have an on-link gw be normally accessible
-                    is_ok = True
-                elif is_ok and 'on-link' in r:
-                    is_ok = False
 
                 if addresses6 == []:
                     is_ok = False
