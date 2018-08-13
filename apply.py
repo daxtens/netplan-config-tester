@@ -167,7 +167,7 @@ for iface_name in parsed['network']['ethernets']:
             iface['routes'] = new_routes
 
     # drop NSs if there does not exist an address of that family
-    if 'nameservers' in iface:
+    if 'nameservers' in iface and 'addresses' in iface['nameservers']:
         new_nsaddrs = []
         for nsaddr in iface['nameservers']['addresses']:
             if ':' in nsaddr:
