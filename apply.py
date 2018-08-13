@@ -102,7 +102,7 @@ for iface_name in parsed['network']['ethernets']:
                 if not is_ok and addresses4 and not 'on-link' in r:
                     try:
                         via_addr = random.choice(list(itertools.islice(addresses4[-1].hosts(), 1000)))
-                        r['via'] = via_addr.compressed
+                        r['via'] = str(via_addr.compressed)
                         #print("new via for r", r)
                         is_ok = True
                     except IndexError:  # empty .hosts()
@@ -125,7 +125,7 @@ for iface_name in parsed['network']['ethernets']:
                         break
                 if not is_ok and addresses6 and not 'on-link' in r:
                     via_addr = random.choice(list(itertools.islice(addresses6[-1].hosts(), 1000)))
-                    r['via'] = via_addr.compressed
+                    r['via'] = str(via_addr.compressed)
                     #print("new via for r", r)
                     is_ok = True
                 elif not is_ok and 'on-link' in r:
@@ -144,7 +144,7 @@ for iface_name in parsed['network']['ethernets']:
                 is_ok = False
 
             # normalise 'to', otherise we get Error: Invalid prefix for given prefix length.
-            r['to'] = parse_addr(r['to']).compressed
+            r['to'] = str(parse_addr(r['to']).compressed)
 
             # scope link and scope host can't have a gateway; drop it
             if 'scope' in r and (r['scope'] == 'link' or r['scope'] == 'host'):
