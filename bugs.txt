@@ -135,6 +135,21 @@ Bug 9
 netplan should not permit a prohibit/unreachable/blackhole route to specify a gateway.
 Otherwise it will not be applied by networkd.
 
+Bug 10
+======
+
+In a route, 'from' needs to take an address not an address + netmask
+
+systemd bugs to be worked around
+================================
+
+#5882
+-----
+
+https://github.com/systemd/systemd/issues/5882
+
+PreferredSource= does not work on IPv6, it would seem.
+
 Other Irritations
 =================
 

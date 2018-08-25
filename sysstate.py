@@ -77,6 +77,8 @@ def parse_ip_route_for_iface(iface, ip_route_str, six=False, table=None):
                     route['metric'] = int(fields[i + 1])
                 elif field == 'scope':
                     route['scope'] = fields[i + 1]
+                elif field == 'src':
+                    route['src'] = fields[i + 1]
 
         if table:
             route['table'] = table

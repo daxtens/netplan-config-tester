@@ -1,6 +1,26 @@
 import gramfuzz
 from gramfuzz.fields import *
 
+# Welcome to the netplan grammar, rendered in a way gramfuzz can understand.
+# gramfuzz takes this grammar and generates random samples that comply with
+# the grammar. apply.py then adjusts it to be semantically meaningful and
+# calls netplan apply to apply it to the system. sysstate.py collects system
+# info and apply.py checks if everything matches.
+
+# This file is very, very much a work in progress. It's poorly ordered, has
+# lots of old stuff or stuff I haven't implemented yet, and the gramfuzz
+# style is not amazingly easy to read. (Although frankly I haven't yet read
+# a grammar definition that is easy to read.)
+#
+# But in short, we start with some utilities, then define a netplan yaml
+# file, and then progressively fill in what that means. NRef() marks a
+# reference to a definition supplied by NDef(). Definitions *can* be
+# referenced before they are used, and I do this liberally. The general
+# and very loose structure of the file is basically depth-first search:
+# start with the top level, drill down, repeat. Ideally I'd like to
+# rearrange to breadth-first search so you progressively get more detailed.
+# one day.
+
 
 class NRef(Ref):
     cat = "netplan_def"
@@ -21,9 +41,12 @@ class Octet(UInt):
 
 # /0 is not usually allowed, special cased for routes
 # things tend to go wrong with really small netmasks so set middling mins
+# likewise, the kernel seems to have trouble adding routes where the gateway
+# is the other IP on a /31. Again, this seems not worth the trouble: make
+# a /30 the smallest
 class IPv4Netmask(UInt):
     min = 8
-    max = 33
+    max = 31
     odds = []
 
 
