@@ -71,6 +71,29 @@ def is_reserved_addr(addr):
         return is_reserved_addr(parse_address(addr))
 
 
+def reset(rules):
+    ifs = ["ens" + str(n) for n in range(7, 13)]# + ["wlan0", "wlan1"]
+    for intf in ifs:
+        os.system("ip address flush dev " + intf)
+        os.system("ip link set dev %s down" % intf)
+
+    os.system("ip route flush type blackhole")
+    os.system("ip route flush type prohibit")
+    os.system("ip route flush type unreachable")
+    os.system("ip -6 route flush type blackhole")
+    os.system("ip -6 route flush type prohibit")
+    os.system("ip -6 route flush type unreachable")
+
+    if rules:
+        sysstate.purge_rules(rules)
+
+    os.system("ip link set dev ens7 address 52:54:00:b4:02:6e")
+    os.system("ip link set dev ens8 address 52:54:00:38:19:7f")
+    os.system("ip link set dev ens9 address 52:54:00:31:9f:12")
+    os.system("ip link set dev ens10 address 52:54:00:9d:a6:ab")
+    os.system("ip link set dev ens11 address 52:54:00:da:93:14")
+    os.system("ip link set dev ens12 address 52:54:00:aa:3d:c3")
+
 # manually shadow stupid networkmanager file!
 # https://github.com/CanonicalLtd/netplan/pull/40
 with open('/etc/NetworkManager/conf.d/10-globally-managed-devices.conf', 'w') as f:
@@ -286,7 +309,8 @@ for iface_name in parsed['network']['ethernets']:
 
 with open('/etc/netplan/fuzz.yaml', 'w') as f:
     f.write(yaml.dump(parsed))
-            
+
+reset([])
 if os.system("netplan apply") != 0:
     exit(1)
     
@@ -324,6 +348,18 @@ while any_down:
                     break
             if not found_addr:
                 print("Missing addr", addr, "on", intf)
+                any_down = True
+                break
+
+        # mac
+        if 'macaddress' in parsed['network']['ethernets'][intf]:
+            if parsed['network']['ethernets'][intf]['macaddress'] != \
+                    iface['hwaddress']:
+                print("MAC mismatch on %s: %s desired, %s seen" % (
+                    intf,
+                    parsed['network']['ethernets'][intf]['macaddress'],
+                    iface['hwaddress']
+                ))
                 any_down = True
                 break
 
@@ -435,16 +471,4 @@ while any_down:
 print("success")
 
 # clean up
-ifs = ["ens" + str(n) for n in range(7, 13)]# + ["wlan0", "wlan1"]
-for intf in ifs:
-    os.system("ip address flush dev " + intf)
-    os.system("ip link set dev %s down" % intf)
-
-    os.system("ip route flush type blackhole")
-    os.system("ip route flush type prohibit")
-    os.system("ip route flush type unreachable")
-    os.system("ip -6 route flush type blackhole")
-    os.system("ip -6 route flush type prohibit")
-    os.system("ip -6 route flush type unreachable")
-
-    sysstate.purge_rules(rules)
+reset(rules)

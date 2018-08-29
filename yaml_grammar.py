@@ -75,12 +75,37 @@ Def("yamlfile",
 
 NDef("ethernets",
      # need at least 1, make it ens7
-     "    ens7:\n", NRef("ethernet"),
-     Opt("    ens8:\n", NRef("ethernet")),
-     Opt("    ens9:\n", NRef("ethernet")),
-     Opt("    ens10:\n", NRef("ethernet")),
-     Opt("    ens11:\n", NRef("ethernet")),
-     Opt("    ens12:\n", NRef("ethernet")),
+     "    ens7:\n",
+     # bug 15
+     "      match:\n"
+     #"        name: ens7\n",
+     "        macaddress: 52:54:00:b4:02:6e\n",
+     NRef("ethernet"),
+     Opt("    ens8:\n",
+         "      match:\n"
+         #"        name: ens8\n",
+         "        macaddress: 52:54:00:38:19:7f\n",
+         NRef("ethernet")),
+     Opt("    ens9:\n",
+         "      match:\n"
+         #"        name: ens9\n",
+         "        macaddress: 52:54:00:31:9f:12\n",
+         NRef("ethernet")),
+     Opt("    ens10:\n",
+         "      match:\n"
+         #"        name: ens10\n",
+         "        macaddress: 52:54:00:9d:a6:ab\n",
+         NRef("ethernet")),
+     Opt("    ens11:\n",
+         "      match:\n"
+         #"        name: ens11\n",
+         "        macaddress: 52:54:00:da:93:14\n",
+         NRef("ethernet")),
+     Opt("    ens12:\n",
+         "      match:\n"
+         #"        name: ens12\n",
+         "        macaddress: 52:54:00:aa:3d:c3\n",
+         NRef("ethernet")),
 )
 
 NDef("ethernet",
