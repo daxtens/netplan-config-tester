@@ -140,7 +140,42 @@ Otherwise it will not be applied by networkd.
 Bug 10
 ======
 
-In a route, 'from' needs to take an address not an address + netmask
+In a route, 'from' needs to take an address not an address + netmask; otherwise networkd won't render it.
+
+Currently no validation is done at all except for checking if it's a recognised family, which means things like
+'10.0.0.1/80' get through
+
+Bug 11
+======
+
+table should be mandatory for routing policy - there needs to be an action
+
+man ip rule is pretty clear:
+
+ip rule { add | del } SELECTOR ACTION
+SELECTOR contains (from, to, tos, fwmark)
+ACTION contains table and other stuff we don't support
+
+AIUI you need to say what the rule should *do*, and there's no other way to do that
+in the schema than a table.
+
+Bug 12
+======
+
+There should be an error/warning if you try to specify routing-policy for NM.
+
+Bug 13?
+=======
+
+Nothing stopping invalidly high tables in routing policy.
+(what is too high? seems things >= 36727 are unreliable)
+
+Query
+=====
+
+ip rules are not interface specific (modulo iif and oif which we don't seem to set)
+This is also true of various route types and the host scope. Do they need a top-level
+block?
 
 systemd bugs to be worked around
 ================================

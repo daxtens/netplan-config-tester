@@ -99,6 +99,7 @@ NDef("networkd_eth",
      #    Opt("      set-name: ", NRef("set_name"), "\n"),
      #)
      "      routes:\n", NRef("networkd_routes"),
+     Opt("      routing-policy:\n", NRef("routing_policy"))
 )
 
 NDef("nm_eth",
@@ -180,7 +181,6 @@ NDef("common_properties",
      Opt("      nameservers:\n", NRef("nameserver_parts")),
      Opt("      macaddress: ", NRef("set_mac"), "\n"),
      #Opt("      optional: true\n"),
-     #Opt("      routing-policy:\n", NRef("routing_policy"))
 )
 
 
@@ -261,7 +261,6 @@ NDef("nm_ipv6_route",
 )
 
 
-
 NDef("routing_policy", PLUS(Or(NRef("ipv4_policy"), NRef("ipv6_policy"))))
 NDef("ipv4_policy",
      "        - ", NRef("ipv4_rprule"), "\n",
@@ -278,10 +277,14 @@ NDef("ipv4_rp_from", "from: ", Or(NRef("ipv4_address_nm"), "0.0.0.0/0"))
 NDef("ipv4_rp_to", "to: ", Or(NRef("ipv4_address_nm"), "0.0.0.0/0"))
 NDef("ipv6_rp_from", "from: ", Or(NRef("ipv6_address_nm"), '"::/0"'))
 NDef("ipv6_rp_to", "to: ", Or(NRef("ipv6_address_nm"), '"::/0"'))
-NDef("rp_table", "table: ",  UInt(min=1, max=65536, odds=[]))
+NDef("rp_table", "table: ",  UInt(min=1, max=32676, odds=[])) # don't clash with local, main or default
 NDef("rp_prio", "priority: ",  UInt(min=0, max=65535, odds=[]))
 NDef("rp_mark", "mark: ",  UInt(min=1, max=65536, odds=[]))
-NDef("rp_tos", "type-of-service: ",  UInt(min=1, max=256, odds=[]))  # max?
+# per wikipedia: https://en.wikipedia.org/wiki/Type_of_service
+# and /etc/iproute2/rt_dsfield
+NDef("rp_tos", "type-of-service: ",
+     Or(0, 32, 40, 56, 64, 72, 80, 88, 96, 104, 112,
+        120, 128, 136, 144, 152, 160, 184, 192, 224))
 
 NDef("ipv4_rprule", Or(
     NRef("ipv4_rp_from"),
@@ -293,10 +296,13 @@ NDef("ipv6_rprule", Or(
 ))
 
 NDef("policy_common",
-     Opt("          ", NRef("rp_table"), "\n"),
+     "          ", NRef("rp_table"), "\n",
      Opt("          ", NRef("rp_prio"), "\n"),
      Opt("          ", NRef("rp_mark"), "\n"),
-     Opt("          ", NRef("rp_tos"), "\n"))
+     # there seem to be a bunch of restrictions on the use of tos with other
+     # fields that I don't understand. try disabling it for now.
+     # Opt("          ", NRef("rp_tos"), "\n")
+     )
 
 
 NDef("wifis",

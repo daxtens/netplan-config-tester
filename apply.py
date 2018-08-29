@@ -293,10 +293,13 @@ if os.system("netplan apply") != 0:
 any_down = True
 sleep = 0
 while any_down:
-    state = sysstate.get_status(tables)
+    full_state = sysstate.get_status(tables)
+    iface_state = full_state['interfaces']
+    rules = full_state['rules']
+
     any_down = False
     for intf in described_ifs:
-        iface = state[intf]
+        iface = iface_state[intf]
         if iface['state'] != 'UP':
             print('waiting for UP on', intf)
             any_down = True
@@ -358,16 +361,77 @@ while any_down:
                 if not found_route:
                     any_down = True
                     print("missing route", desired_route, "on", intf, " - ", iface['routes'])
+                    break
+
+        # check routing policy
+        if ('routing-policy' in parsed['network']['ethernets'][intf] and
+                parsed['network']['ethernets'][intf]['routing-policy']):
+
+            desired_rules = parsed['network']['ethernets'][intf]['routing-policy']
+            for desired_rule in desired_rules:
+                found_rule = False
+                desired_from = None
+                if 'from' in desired_rule:
+                    desired_from = parse_network(desired_rule['from'])
+
+                desired_to = None
+                if 'to' in desired_rule:
+                    desired_to = parse_network(desired_rule['to'])
+
+                for system_rule in rules:
+                    # from
+                    if desired_from:
+                        if 'from' not in system_rule:
+                            continue
+
+                        system_from = parse_network(system_rule['from'])
+                        if system_from != desired_from:
+                            continue
+
+                    # to
+                    if desired_to:
+                        if 'to' not in system_rule:
+                            # this is equivalent to a default (0.0.0.0/0, ::/0)
+                            if desired_to != ipaddress.IPv4Network(u'0.0.0.0/0') and \
+                                    desired_to != ipaddress.IPv6Network(u'::/0'):
+                                continue
+                        else:
+                            system_to = parse_network(system_rule['to'])
+                            if system_to != desired_to:
+                                continue
+
+                    # table
+                    if 'table' in desired_rule:
+                        if 'table' not in system_rule:
+                            continue
+                        if desired_rule['table'] != system_rule['table']:
+                            continue
+
+                    # priority
+                    # fwmark (mark)
+                    # type-of-service
+                    # hope for the best for now
+                    found_rule = True
+                    break
+
+            if not found_rule:
+                any_down = True
+                print("missing rule", desired_rule, "from", intf)
+                # don't stop at the first - it seems that if one rule isn't applied
+                # a bunch of subsequent ones are also not applied
+                # break
 
     if any_down:
         time.sleep(1)
         sleep += 1
         if sleep == 3:
             print("kicking netplan apply")
+            sysstate.purge_rules(rules)
             os.system("netplan apply")
         if sleep == 12:
             print("giving up")
             exit(1)
+
 print("success")
 
 # clean up
@@ -382,3 +446,5 @@ for intf in ifs:
     os.system("ip -6 route flush type blackhole")
     os.system("ip -6 route flush type prohibit")
     os.system("ip -6 route flush type unreachable")
+
+    sysstate.purge_rules(rules)
