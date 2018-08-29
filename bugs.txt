@@ -170,6 +170,15 @@ Bug 13?
 Nothing stopping invalidly high tables in routing policy.
 (what is too high? seems things >= 36727 are unreliable)
 
+Bug 14
+======
+
+netplan requires that a route policy must include a from or to IP.
+But this is not a requirement - this is valid:
+ip rule add tos 8 table 12345
+
+this requirement should be dropped
+
 Query
 =====
 
