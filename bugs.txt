@@ -1,4 +1,4 @@
-This is a running log of the bugs I've found either directy using this tool, or in the development of the tool. The idea is that it will help me to evaluate whether writing this tester was an efficient use of my time.
+This is a running log of the bugs I've found either directly using this tool, or in the development of the tool. The idea is that it will help me to evaluate whether writing this tester was an efficient use of my time.
 
 Bug 1
 =====
@@ -34,6 +34,8 @@ netplan renders an ipv4 dns search property, even though there is no configured 
 
 Bug 3
 =====
+
+Fixed in my tree.
 
 netplan should warn/error if you attempt to render a route that NetworkManager does not understand.
 
@@ -81,7 +83,7 @@ Bug 6
 
 Fixed in my tree.
 
-Netplan renders the source of a route as "From=", it should be "Source=".
+Netplan renders the source of a route as "From=", it should be "PreferredSource=".
 
 This leads to the following messages in syslog:
 

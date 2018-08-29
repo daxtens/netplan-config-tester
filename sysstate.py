@@ -35,7 +35,7 @@ def parse_ip_addr_for_iface(iface, ip_addr):
 
     return result
 
-# i have no idea what an ipv6 route looks like!
+
 def parse_ip_route_for_iface(iface, ip_route_str, six=False, table=None):
     routes = []
     for l in ip_route_str.splitlines():

@@ -72,6 +72,7 @@ def is_reserved_addr(addr):
 
 
 # manually shadow stupid networkmanager file!
+# https://github.com/CanonicalLtd/netplan/pull/40
 with open('/etc/NetworkManager/conf.d/10-globally-managed-devices.conf', 'w') as f:
     f.write('\n')
 
