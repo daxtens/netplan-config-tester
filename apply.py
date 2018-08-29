@@ -9,6 +9,7 @@ import time
 import ipaddress
 import itertools
 import random
+import copy
 
 
 TEST_GENERATE = True
@@ -94,42 +95,32 @@ def reset(rules):
     os.system("ip link set dev ens11 address 52:54:00:da:93:14")
     os.system("ip link set dev ens12 address 52:54:00:aa:3d:c3")
 
-# manually shadow stupid networkmanager file!
-# https://github.com/CanonicalLtd/netplan/pull/40
-with open('/etc/NetworkManager/conf.d/10-globally-managed-devices.conf', 'w') as f:
-    f.write('\n')
 
-fuzzer = gramfuzz.GramFuzzer()
-fuzzer.load_grammar("yaml_grammar.py")
-yaml_dat = fuzzer.gen(cat="yamlfile", num=1)[0]
+def generate_syntatically_valid_yaml():
+    fuzzer = gramfuzz.GramFuzzer()
+    fuzzer.load_grammar("yaml_grammar.py")
+    yaml_dat = fuzzer.gen(cat="yamlfile", num=1)[0]
 
-# in theory, at this point, the YAML should survive 'netplan generate'.
-# now we expect netplan generate to make the checks around e.g. the
-# things NM can't render (e.g. bug 3, bug 4), so those sorts of things
-# should really be sorted out and the grammar level.
+    # in theory, at this point, the YAML should survive 'netplan generate'.
+    # now we expect netplan generate to make the checks around e.g. the
+    # things NM can't render (e.g. bug 3, bug 4), so those sorts of things
+    # should really be sorted out and the grammar level.
 
-if TEST_GENERATE:
-    with open('/etc/netplan/fuzz.yaml', 'w') as f:
-        f.write(yaml_dat)
+    if TEST_GENERATE:
+        with open('/etc/netplan/fuzz.yaml', 'w') as f:
+            f.write(yaml_dat)
 
-    if os.system("netplan generate") != 0:
-        exit(1)
+        if os.system("netplan generate") != 0:
+            exit(1)
 
-parsed = yaml.load(yaml_dat)
-described_ifs = parsed['network']['ethernets'].keys()
-# print(described_ifs)
-
-# we need to query routing tables so keep track of the ones we use
-tables = []
+    return yaml_dat
 
 
 def mangle_route(r, addresses4, addresses6, iface):
     """Make a route semantically meaningful.
     There's quite a lot that can go wrong here.
-    Return None or a fixed up route.
+    Return None  or (fixed up route, additional tables).
     Amend the global list of tables if returning a valid route"""
-
-    global tables
 
     # generic tweaks across address family
 
@@ -183,7 +174,6 @@ def mangle_route(r, addresses4, addresses6, iface):
             # hoping my understanding of on-link is correct here and you
             # cannot have an on-link gw be normally accessible
             if not is_reserved_addr(via_addr):
-                print(via_addr.compressed)
                 route_is_ok = True
         elif route_is_ok and 'on-link' in r:
             return None
@@ -235,240 +225,383 @@ def mangle_route(r, addresses4, addresses6, iface):
 
     # keep track of tables we use
     if 'table' in r:
-        tables += [r['table']]
+        return r, [r['table']]
+    else:
+        return r, []
 
-    return r
 
+def make_semantically_meaningful(parsed):
+    """make the configuration semantically meaningful -
+    things like not having things in the multicast or
+    loopback address range, having non-on-link gws in the
+    right subnets, etc.
 
-# make the configuration semantically meaningful -
-# things like not having things in the multicast or
-# loopback address range, having non-on-link gws in the
-# right subnets, etc.
-for iface_name in parsed['network']['ethernets']:
-    iface = parsed['network']['ethernets'][iface_name]
+    takes parsed syntactically valid yaml dict (which is mutated!)
+    returns (updated dict, used routing tables)"""
 
-    addresses4 = []
-    addresses6 = []
-    for a in iface['addresses']:
-        addr = parse_network(a)
-        if is_reserved_net(addr):
-            iface['addresses'].remove(a)
-        else:
-            if ':' in a:
-                addresses6 += [(parse_address(a), addr)]
+    # we need to query routing tables so keep track of the ones we use
+    tables = []
+
+    for iface_name in parsed['network']['ethernets']:
+        iface = parsed['network']['ethernets'][iface_name]
+
+        addresses4 = []
+        addresses6 = []
+        for a in iface['addresses']:
+            addr = parse_network(a)
+            if is_reserved_net(addr):
+                iface['addresses'].remove(a)
             else:
-                addresses4 += [(parse_address(a), addr)]
-
-    if addresses4 == [] and addresses6 == []:
-        # ergh, no non-reserved addresses
-        iface['addresses'] = ['1.2.3.4/8']
-        addresses4 = [(ipaddress.IPv4Address(u'1.2.3.4'), ipaddress.IPv4Network(u'1.0.0.0/8'))]
-
-    if 'gateway4' in iface:
-        gw = ipaddress.IPv4Address(unicode(iface['gateway4']))
-        is_ok = False
-        for a in addresses4:
-            if gw in a[1]:
-                is_ok = True
-                break
-        if not is_ok:
-            del iface['gateway4']
-
-    if 'gateway6' in iface:
-        gw = ipaddress.IPv6Address(unicode(iface['gateway6']))
-        is_ok = False
-        for a in addresses6:
-            if gw in a[1]:
-                is_ok = True
-                break
-        if not is_ok:
-            del iface['gateway6']
-
-    if 'routes' in iface:
-        new_routes = []
-        for r in iface['routes']:
-            new_r = mangle_route(r, addresses4, addresses6, iface)
-            if new_r:
-                new_routes.append(new_r)
-
-        #print(new_routes)
-        iface['routes'] = new_routes
-
-    # drop NSs if there does not exist an address of that family
-    if 'nameservers' in iface and 'addresses' in iface['nameservers']:
-        new_nsaddrs = []
-        for nsaddr in iface['nameservers']['addresses']:
-            if ':' in nsaddr:
-                if not len(addresses6) == 0:
-                    new_nsaddrs += [nsaddr]
-                    iface['nameservers']['addresses'].remove(nsaddr)
-            else:
-                if not len(addresses4) == 0:
-                    new_nsaddrs += [nsaddr]
-        iface['nameservers']['addresses'] = new_nsaddrs
-
-with open('/etc/netplan/fuzz.yaml', 'w') as f:
-    f.write(yaml.dump(parsed))
-
-reset([])
-if os.system("netplan apply") != 0:
-    exit(1)
-    
-any_down = True
-sleep = 0
-while any_down:
-    full_state = sysstate.get_status(tables)
-    iface_state = full_state['interfaces']
-    rules = full_state['rules']
-
-    any_down = False
-    for intf in described_ifs:
-        iface = iface_state[intf]
-        if iface['state'] != 'UP':
-            print('waiting for UP on', intf)
-            any_down = True
-            break
-        if not 'addresses' in iface:
-            print('waiting for addresses on', intf)
-            #print(iface)
-            any_down = True
-            break
-        for addr in parsed['network']['ethernets'][intf]['addresses']:
-            found_addr = False
-            # canonicalise to deal with ipv6 addresses (:09: vs :9:, ::)
-            desired_addr = parse_network(addr)
-
-            for ifaddr in iface['addresses']:
-                if ':' in ifaddr['address']:
-                    got_addr = ipaddress.IPv6Network(unicode(ifaddr['address']), strict=False)
+                if ':' in a:
+                    addresses6 += [(parse_address(a), addr)]
                 else:
-                    got_addr = ipaddress.IPv4Network(unicode(ifaddr['address']), strict=False)
-                if desired_addr == got_addr:
-                    found_addr = True
+                    addresses4 += [(parse_address(a), addr)]
+
+        if addresses4 == [] and addresses6 == []:
+            # ergh, no non-reserved addresses
+            iface['addresses'] = ['1.2.3.4/8']
+            addresses4 = [(ipaddress.IPv4Address(u'1.2.3.4'), ipaddress.IPv4Network(u'1.0.0.0/8'))]
+
+        if 'gateway4' in iface:
+            gw = ipaddress.IPv4Address(unicode(iface['gateway4']))
+            is_ok = False
+            for a in addresses4:
+                if gw in a[1]:
+                    is_ok = True
                     break
-            if not found_addr:
-                print("Missing addr", addr, "on", intf)
-                any_down = True
-                break
+            if not is_ok:
+                del iface['gateway4']
 
-        # mac
-        if 'macaddress' in parsed['network']['ethernets'][intf]:
-            if parsed['network']['ethernets'][intf]['macaddress'] != \
-                    iface['hwaddress']:
-                print("MAC mismatch on %s: %s desired, %s seen" % (
-                    intf,
-                    parsed['network']['ethernets'][intf]['macaddress'],
-                    iface['hwaddress']
-                ))
-                any_down = True
-                break
-
-        # routes
-        if 'routes' in parsed['network']['ethernets'][intf] and parsed['network']['ethernets'][intf]['routes']:
-            #print(intf, iface, parsed['network']['ethernets'][intf], 'routes' in iface)
-            if not 'routes' in iface:
-                any_down = True
-                print("Waiting for routes on", intf)
-                break
-
-            for desired_route in parsed['network']['ethernets'][intf]['routes']:
-                #print(desired_route)
-                found_route = False
-                # this assumes that if to matches, we're good, which is not completely
-                # accurate but a good first pass
-                # we should also match on all other properties as well.
-                desired_to = parse_network(desired_route['to'])
-                if 'from' in desired_route:
-                    desired_from = parse_address(desired_route['from'])
-                for iface_route in iface['routes']:
-                    iface_to = parse_network(iface_route['to'])
-                    if desired_to != iface_to:
-                        continue
-
-                    if 'from' in desired_route:
-                        if 'src' not in iface_route:
-                            continue
-                        iface_from = parse_address(iface_route['src'])
-                        if desired_from != iface_from:
-                            continue
-
-                    found_route = True
+        if 'gateway6' in iface:
+            gw = ipaddress.IPv6Address(unicode(iface['gateway6']))
+            is_ok = False
+            for a in addresses6:
+                if gw in a[1]:
+                    is_ok = True
                     break
-                if not found_route:
+            if not is_ok:
+                del iface['gateway6']
+
+        # drop NSs if there does not exist an address of that family
+        if 'nameservers' in iface and 'addresses' in iface['nameservers']:
+            new_nsaddrs = []
+            for nsaddr in iface['nameservers']['addresses']:
+                if ':' in nsaddr:
+                    if not len(addresses6) == 0:
+                        new_nsaddrs += [nsaddr]
+                        iface['nameservers']['addresses'].remove(nsaddr)
+                else:
+                    if not len(addresses4) == 0:
+                        new_nsaddrs += [nsaddr]
+            iface['nameservers']['addresses'] = new_nsaddrs
+
+        if 'routes' in iface:
+            new_routes = []
+            for r in iface['routes']:
+                new_r = mangle_route(r, addresses4, addresses6, iface)
+                if new_r:
+                    new_routes.append(new_r[0])
+                    tables += new_r[1]
+
+            # print(new_routes)
+            iface['routes'] = new_routes
+
+    return (parsed, tables)
+
+
+def validate(parsed, tables):
+    """Check if the system state matches a provided configuration
+
+    takes parsed, a dict representing a netplan yaml config
+      and tables, a list of the routing tables to query
+
+    returns (boolean representing success, string representing status)
+    eg. (True, 'success')
+        (False, 'ens7 is not up')
+    """
+    if 'network' not in parsed:
+        return (False, 'invalid')
+    if 'ethernets' not in parsed['network']:
+        return (False, 'invalid')
+
+    described_ifs = parsed['network']['ethernets'].keys()
+    any_down = True
+    state = "success"
+    sleep = 0
+    while any_down:
+        full_state = sysstate.get_status(tables)
+        iface_state = full_state['interfaces']
+        rules = full_state['rules']
+
+        any_down = False
+        for intf in described_ifs:
+            iface = iface_state[intf]
+            if iface['state'] != 'UP':
+                state = ('waiting for UP on %s' % intf)
+                any_down = True
+                break
+            if 'addresses' in parsed['network']['ethernets'][intf]:
+                if 'addresses' not in iface:
+                    state = ('waiting for addresses on %s' % intf)
                     any_down = True
-                    print("missing route", desired_route, "on", intf, " - ", iface['routes'])
+                    break
+                for addr in parsed['network']['ethernets'][intf]['addresses']:
+                    found_addr = False
+                    desired_addr = parse_address(addr)
+                    desired_net = parse_network(addr)
+
+                    for ifaddr in iface['addresses']:
+                        got_addr = parse_address(ifaddr['address'])
+                        got_net = parse_network(ifaddr['address'])
+                        # print(desired_addr, desired_net, got_addr, got_net,
+                        #      desired_addr == got_addr,
+                        #      desired_net == got_net)
+                        if desired_addr == got_addr and desired_net == got_net:
+                            found_addr = True
+                            break
+                    if not found_addr:
+                        state = ("Missing addr %s on %s" % (addr, intf))
+                        any_down = True
+                        break
+
+            # mac
+            #if 'macaddress' in parsed['network']['ethernets'][intf]:
+            #    if parsed['network']['ethernets'][intf]['macaddress'] != \
+            #            iface['hwaddress']:
+            #        state = ("MAC mismatch on %s: %s desired, %s seen" % (
+            #            intf,
+            #            parsed['network']['ethernets'][intf]['macaddress'],
+            #            iface['hwaddress']
+            #        ))
+            #        any_down = True
+            #        break
+
+            # routes
+            if 'routes' in parsed['network']['ethernets'][intf] and parsed['network']['ethernets'][intf]['routes']:
+                if 'routes' not in iface:
+                    any_down = True
+                    state = ("Waiting for routes on %s" % intf)
                     break
 
-        # check routing policy
-        if ('routing-policy' in parsed['network']['ethernets'][intf] and
-                parsed['network']['ethernets'][intf]['routing-policy']):
+                for desired_route in parsed['network']['ethernets'][intf]['routes']:
+                    found_route = False
+                    # this assumes that if from and to match, we're good,
+                    # which is not completely accurate but a good first pass
+                    # we should also match on all other properties as well.
+                    desired_to = parse_network(desired_route['to'])
+                    desired_from = None
+                    if 'from' in desired_route:
+                        desired_from = parse_address(desired_route['from'])
+                    for iface_route in iface['routes']:
+                        iface_to = parse_network(iface_route['to'])
+                        if desired_to != iface_to:
+                            continue
 
-            desired_rules = parsed['network']['ethernets'][intf]['routing-policy']
-            for desired_rule in desired_rules:
+                        if desired_from:
+                            if 'src' not in iface_route:
+                                continue
+                            iface_from = parse_address(iface_route['src'])
+                            if desired_from != iface_from:
+                                continue
+
+                        found_route = True
+                        break
+                    if not found_route:
+                        any_down = True
+                        state = ("missing route %s on %s" % (desired_route, intf))
+                        break
+
+            # check routing policy
+            if ('routing-policy' in parsed['network']['ethernets'][intf] and
+                    parsed['network']['ethernets'][intf]['routing-policy']):
                 found_rule = False
-                desired_from = None
-                if 'from' in desired_rule:
-                    desired_from = parse_network(desired_rule['from'])
+                desired_rules = parsed['network']['ethernets'][intf]['routing-policy']
+                for desired_rule in desired_rules:
+                    found_rule = False
+                    desired_from = None
+                    if 'from' in desired_rule:
+                        desired_from = parse_network(desired_rule['from'])
 
-                desired_to = None
-                if 'to' in desired_rule:
-                    desired_to = parse_network(desired_rule['to'])
+                    desired_to = None
+                    if 'to' in desired_rule:
+                        desired_to = parse_network(desired_rule['to'])
 
-                for system_rule in rules:
-                    # from
-                    if desired_from:
-                        if 'from' not in system_rule:
-                            continue
-
-                        system_from = parse_network(system_rule['from'])
-                        if system_from != desired_from:
-                            continue
-
-                    # to
-                    if desired_to:
-                        if 'to' not in system_rule:
-                            # this is equivalent to a default (0.0.0.0/0, ::/0)
-                            if desired_to != ipaddress.IPv4Network(u'0.0.0.0/0') and \
-                                    desired_to != ipaddress.IPv6Network(u'::/0'):
-                                continue
-                        else:
-                            system_to = parse_network(system_rule['to'])
-                            if system_to != desired_to:
+                    for system_rule in rules:
+                        # from
+                        if desired_from:
+                            if 'from' not in system_rule:
                                 continue
 
-                    # table
-                    if 'table' in desired_rule:
-                        if 'table' not in system_rule:
-                            continue
-                        if desired_rule['table'] != system_rule['table']:
-                            continue
+                            system_from = parse_network(system_rule['from'])
+                            if system_from != desired_from:
+                                continue
 
-                    # priority
-                    # fwmark (mark)
-                    # type-of-service
-                    # hope for the best for now
-                    found_rule = True
+                        # to
+                        if desired_to:
+                            if 'to' not in system_rule:
+                                # this is equivalent to a default (0.0.0.0/0, ::/0)
+                                if desired_to != ipaddress.IPv4Network(u'0.0.0.0/0') and \
+                                        desired_to != ipaddress.IPv6Network(u'::/0'):
+                                    continue
+                            else:
+                                system_to = parse_network(system_rule['to'])
+                                if system_to != desired_to:
+                                    continue
+
+                        # table
+                        if 'table' in desired_rule:
+                            if 'table' not in system_rule:
+                                continue
+                            if desired_rule['table'] != system_rule['table']:
+                                continue
+
+                        # priority
+                        # fwmark (mark)
+                        # type-of-service
+                        # hope for the best for now
+                        found_rule = True
+                        break
+
+                if not found_rule:
+                    any_down = True
+                    status = ("missing rule %s from %s", (desired_rule, intf))
                     break
 
-            if not found_rule:
-                any_down = True
-                print("missing rule", desired_rule, "from", intf)
-                # don't stop at the first - it seems that if one rule isn't applied
-                # a bunch of subsequent ones are also not applied
-                # break
+        if any_down:
+            print(state)
+            time.sleep(1)
+            sleep += 1
+            if sleep == 3:
+                print("kicking netplan apply")
+                sysstate.purge_rules(rules)
+                os.system("netplan apply")
+            if sleep == 6:
+                print("giving up")
+                return (False, state)
 
-    if any_down:
-        time.sleep(1)
-        sleep += 1
-        if sleep == 3:
-            print("kicking netplan apply")
-            sysstate.purge_rules(rules)
-            os.system("netplan apply")
-        if sleep == 12:
-            print("giving up")
-            exit(1)
+    print("success")
+    return (True, "success")
 
-print("success")
 
-# clean up
-reset(rules)
+def same_failure(new, tables, old_error):
+    with open('/etc/netplan/fuzz.yaml', 'w') as f:
+        f.write(yaml.dump(new))
+
+    reset(sysstate.get_status(tables)['rules'])
+    if os.system("netplan apply") != 0:
+        print("invalid yaml")
+        return False
+
+    new_result = validate(new, tables)
+    print(new_result, old_error)
+    return new_result[1] == old_error
+
+
+def minimise_dict(broken, key, orig_ptr, tables, error):
+    print('m_d', key, error)
+    b_k = broken[key]
+    keys = b_k.keys()
+    for k in keys:
+        if k in ['addresses', 'version']:
+            print('skipping', k)
+            continue
+        print('trying to delete', k)
+        save = copy.deepcopy(b_k)
+        #print(yaml.dump(b_k))
+        #print(b_k[k])
+        del b_k[k]
+        #print(k in b_k)
+        #print(yaml.dump(b_k))
+        if same_failure(orig_ptr, tables, error):
+            print('can delete', k)
+        else:
+            broken[key] = save
+            b_k = broken[key]
+            print('cannot delete', k)
+            if isinstance(b_k[k], dict):
+                print('recursing into', k)
+                broken[key] = minimise_dict(broken[key], k, orig_ptr, tables, error)
+            elif isinstance(b_k[k], list):
+                print('iterating through', k)
+                broken[key] = minimise_list(broken[key], k, orig_ptr, tables, error)
+    print('leaving m_d', key)
+    return broken
+
+
+def minimise_list(broken, key, orig_ptr, tables, error):
+    print('m_l', key, error)
+    new_l = []
+    rest = copy.deepcopy(broken[key])
+    while rest:
+        print('trying to delete', rest[0])
+        old = rest[0]
+        del rest[0]
+        broken[key] = new_l + rest
+        if same_failure(orig_ptr, tables, error):
+            print('can delete', old)
+        else:
+            print('cannot delete', old)
+            new_l += [old]
+            broken[key] = new_l + rest
+
+    print('leaving m_l', key)
+    return broken
+
+
+def minimise(broken, tables, error):
+    """attempt to minimise broken yaml so as to get a minimal example of something
+    that fails the same way"""
+
+    broken = minimise_dict(broken, 'network', broken, tables, error)
+
+    return broken
+
+
+if __name__ == '__main__':
+    # manually shadow stupid networkmanager file!
+    # https://github.com/CanonicalLtd/netplan/pull/40
+    with open('/etc/NetworkManager/conf.d/10-globally-managed-devices.conf', 'w') as f:
+        f.write('\n')
+
+    yaml_dat = generate_syntatically_valid_yaml()
+    parsed = yaml.load(yaml_dat)
+    parsed, tables = make_semantically_meaningful(parsed)
+
+    with open('/etc/netplan/fuzz.yaml', 'w') as f:
+        f.write(yaml.dump(parsed))
+
+    reset([])
+    if os.system("netplan apply") != 0:
+        exit(1)
+
+    time.sleep(1)
+
+    result = validate(parsed, tables)
+    if not result[0]:
+        print("failed - attempting to minimise!")
+        reset(sysstate.get_status(tables)['rules'])
+        minimal_1 = minimise(parsed, tables, result[1])
+        minimal_1_yaml = yaml.dump(minimal_1)
+        print("------")
+        print(minimal_1_yaml)
+        minimal_2 = minimise(minimal_1, tables, result[1])
+        minimal_2_yaml = yaml.dump(minimal_2)
+        print("------")
+        print(minimal_2_yaml)
+        while minimal_1_yaml != minimal_2_yaml:
+            minimal_1 = minimal_2
+            minimal_1_yaml = minimal_2_yaml
+            minimal_2 = minimise(minimal_1, tables, result[1])
+            minimal_2_yaml = yaml.dump(minimal_2)
+            print("------")
+            print(minimal_2_yaml)
+        print('=========')
+        print(minimal_2_yaml)
+        print('=========')
+        print("Throws error: %s" % result[1])
+        with open('/etc/netplan/fuzz.yaml', 'w') as f:
+            f.write(yaml.dump(minimal_2))
+        exit(1)
+
+    # clean up
+    reset(sysstate.get_status(tables)['rules'])
