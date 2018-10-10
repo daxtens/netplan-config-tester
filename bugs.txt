@@ -95,11 +95,6 @@ Bug 15
 MAC address setting doesn't work with 'default' match by ifname;
 you need to add a match stanza with a MAC(?)
 
-Bug 16
-------
-
-While working on minimiser - empty file in /etc/netplan cause AttributeError NoneType has no get
-
 
 Fixed Upstream
 ==============
@@ -206,6 +201,14 @@ Example:
 succeeds, but
 # ip route add 172.64.0.0/12 scope host dev ens10 via 1.2.3.4
 Error: Route with host scope can not have a gateway.
+
+Bug 16
+------
+
+LP: #1795343
+
+While working on minimiser - empty file in /etc/netplan cause AttributeError NoneType has no get
+
 
 Query
 =====
